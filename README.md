@@ -5,10 +5,10 @@ A set of research tools for silent speech classification, utilising KARA ONE dat
 Download the repository, import Dataset and Classifier from SSC.py.
 
 ### Prerequisites
-- mne (https://martinos.org/mne/stable/index.html)
-- Scipy
-- Numpy
-- Sklearn
+- MNE (https://martinos.org/mne/stable/index.html)
+- SciPy (https://www.scipy.org)
+- NumPy (http://www.numpy.org)
+- scikit-learn (https://scikit-learn.org/stable/)
 - aseegg (currently not available publicly, a wrapper for a Scipy filter)
 
 ## Known Issues
@@ -16,7 +16,8 @@ Download the repository, import Dataset and Classifier from SSC.py.
 * finding best features works only with Anova and violates the assumption of normality of distribution.
 
 ## TODO
-* plotting 
+* plotting
+* replacing aseegg with Scipy
 
 ## Author
 Wojciech Błądek
