@@ -20,8 +20,6 @@ from sklearn.preprocessing import StandardScaler
 from scipy import stats
 from scipy import signal as sig
 from time import time
-
-import aseegg as aseegg
 from features import fast_feat_array
 
 
