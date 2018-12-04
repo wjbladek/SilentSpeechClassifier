@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# version 1.0
+# version 1.1
 """Preproccessing and machine learning tools for the Kara One database
 (openly available EEG data from an imagined speech research). 
 """
@@ -18,10 +18,12 @@ from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from scipy import stats
+from scipy import signal as sig
 from time import time
 
 import aseegg as aseegg
 from features import fast_feat_array
+
 
 class Dataset:
     """Loading and preprocessing of the KARA ONE database.
@@ -40,7 +42,7 @@ class Dataset:
     subject : string
         subject name, in this case 'MM05', 'MM21' etc.
         Used for file navigation.
-    figuresPath : str
+    figures_path : str
         By default it is /YOUR_SCRIPT/figures,
         folder is created if there is none.
 
@@ -82,8 +84,8 @@ class Dataset:
             score = cl.classify(X, Y)
     """
     registry = []
-    figuresPath = os.path.dirname(os.path.abspath(__file__)) + '/figures'
-    os.makedirs(figuresPath, exist_ok=True)
+    figures_path = os.path.dirname(os.path.abspath(__file__)) + '/figures'
+    os.makedirs(figures_path, exist_ok=True)
 
     def __init__(self, subject):
         self.name = subject
@@ -96,7 +98,7 @@ class Dataset:
 
         Notes
         -----
-        By default, the function does not load all the channels, it omits
+        By default, the function does not load all the channels, it excludes
         ['EKG', 'EMG', 'Trigger', 'STI 014']. 
         It uses files:
             *.cnt                      raw EEG data
@@ -120,7 +122,8 @@ class Dataset:
             print("Loading raw data.")
             for f in glob.glob("*.cnt"):
                 self.eeg_data = mne.io.read_raw_cnt(f, 'standard_1020', preload=True)
-                self.eeg_data.drop_channels(['EKG', 'EMG', 'Trigger', 'STI 014'])
+                # self.eeg_data.drop_channels(['CB1', 'CB2', 'VEO', 'HEO', 'EKG', 'EMG', 'Trigger', 'STI 014'])
+                self.eeg_data.drop_channels(['CB1', 'CB2', 'VEO', 'HEO', 'EKG', 'EMG', 'Trigger'])
         else:
             print("Loading filtered data.")
             for f in glob.glob("*-filtered.fif"):
@@ -141,13 +144,12 @@ class Dataset:
 
         ['FP1', 'FPZ', 'FP2', 'AF3', 'AF4', 'F7', 'F5', 'F3', 'F1', 'FZ',
         'F2', 'F4', 'F6', 'F8', 'FT7', 'FC5', 'FC3', 'FC1', 'FCZ', 'FC2',
-        'FC4', 'FC6', 'FT8', 'T7', 'C5', 'C3', 'C1', 'CZ', 'C2', 'C4',
-        'C6', 'T8', 'M1', 'TP7', 'CP5', 'CP3', 'CP1', 'CPZ', 'CP2', 'CP4',
-        'CP6', 'TP8', 'M2', 'P7', 'P5', 'P3', 'P1', 'PZ', 'P2', 'P4',
-        'P6', 'P8', 'PO7', 'PO5', 'PO3', 'POZ', 'PO4', 'PO6', 'PO8',
-        'CB1', 'O1', 'OZ', 'O2', 'CB2', 'VEO', 'HEO']
+        'FC4', 'FC6', 'FT8', 'T7', 'C5', 'C3', 'C1', 'CZ', 'C2', 'C4', 'C6',
+        'T8', 'M1', 'TP7', 'CP5', 'CP3', 'CP1', 'CPZ', 'CP2', 'CP4', 'CP6',
+        'TP8', 'M2', 'P7', 'P5', 'P3', 'P1', 'PZ', 'P2', 'P4', 'P6', 'P8',
+        'PO7', 'PO5', 'PO3', 'POZ', 'PO4', 'PO6', 'PO8', 'O1', 'OZ', 'O2']
         
-        Excluded : ['EKG', 'EMG', 'Trigger', 'STI 014']
+        Excluded : ['CB1','CB2', 'VEO', 'HEO', 'EKG', 'EMG', 'Trigger', 'STI 014']
 
         Parameters
         ----------
@@ -195,21 +197,24 @@ class Dataset:
         plot : bool
             Plots results from before and after a filtration. The results
             are not shown during the runtime. Instead, the are saved, path 
-            is stored in self.figuresPath, by default /YOUR_SCRIPT/figures.
+            is stored in self.figures_path, by default /YOUR_SCRIPT/figures.
         """
         print("Filtering data.")
         if plot:
             fig = self.eeg_data.plot_psd(tmax=np.inf, average=False, fmin=0., fmax=130., show=False)
-            fig.savefig(os.path.join(self.figuresPath, self.name + "_raw_signal.png"))
-        for idx, eeg_vector in enumerate(self.eeg_data[:][0]):
-            if hp_freq:
-                self.eeg_data[idx] = aseegg.gornoprzepustowy(eeg_vector, self.eeg_data.info['sfreq'], hp_freq)
-            if lp_freq:
-                self.eeg_data[idx] = aseegg.dolnoprzepustowy(eeg_vector, self.eeg_data.info['sfreq'], lp_freq)
+            fig.savefig(os.path.join(self.figures_path, self.name + "_raw_signal.png"))
+        if hp_freq:
+            for idx, eeg_vector in enumerate(self.eeg_data[:][0]):
+                [b, a] = sig.butter(4, hp_freq/self.eeg_data.info['sfreq']/2, btype='highpass')
+                self.eeg_data[idx] = sig.filtfilt(b, a, eeg_vector)
+        if lp_freq:
+            for idx, eeg_vector in enumerate(self.eeg_data[:][0]):
+                [b, a] = sig.butter(4, lp_freq/self.eeg_data.info['sfreq']/2, btype='lowpass')
+                self.eeg_data[idx] = sig.filtfilt(b, a, eeg_vector)
         print("Filtering done.")
         if plot:
             fig = self.eeg_data.plot_psd(tmax=np.inf, average=False, fmin=0., fmax=130., show=False)
-            fig.savefig(os.path.join(self.figuresPath, self.name + "_filtered_signal.png"))
+            fig.savefig(os.path.join(self.figures_path, self.name + "_filtered_signal.png"))
         if save_filtered_data:
             self.eeg_data.save(self.name + "-filtered.fif", overwrite=True)
             print("Filtered data saved as " + self.name + "-filtered.fif")
@@ -256,17 +261,16 @@ class Dataset:
             ica.save(self.name + "-ica.fif")
 
 
-    def prepare_data(self, mode=2, scale_data=True):
+    def prepare_data(self, prompts_list=None, scale_data=True):
         """Prepare labels and calculate features.
 
         Parameters
         ----------
-        mode : int
-            mode=0 -> rest vs ~rest
-            mode=1 -> phonems vs phonems
-            mode=2 -> words vs words
-            mode=3 -> phonems vs words
-            mode=4 -> all vs all
+        prompts_list : dict
+            a dictionary, containing chosen prompts as keys 
+            and their categories as their respective values. 
+            Take a look at the SilentSpeechClassifier.expVariants
+            module or example.py for working instances.
         scale_data : bool
             scales features values with 'Sklearn.StandardScaler()'.
             Some ML algorithms demand scaled data to work properly.
@@ -279,11 +283,12 @@ class Dataset:
             1D array of labels with 'str' type.
         """
        
-        def _calculate_features(condition_inds, prompts):
+        def _calculate_features(condition_inds, prompts_list):
+            print("Calculating features.")
             offset = int(self.eeg_data.info["sfreq"]/2)
             X = []
             for i, prompt in enumerate(self.prompts["prompts"][0]):
-                if prompts == 'all' or prompt in prompts:
+                if prompt[0] in prompts_list:
                     start = self.epoch_inds[condition_inds][0][i][0][0] + offset
                     end = self.epoch_inds[condition_inds][0][i][0][1]
                     channel_set = []
@@ -293,43 +298,24 @@ class Dataset:
                     X.append(channel_set)
             return X
 
-        print("Calculating features.")
         t0 = time()
         Y =[]
-        if mode == 0:
-            X = _calculate_features("clearing_inds",'all')
-            X.extend(_calculate_features("thinking_inds", 'all'))
-            Y = np.hstack([np.repeat('rest', len(X)/2), np.repeat('active', len(X)/2)])
-        elif mode == 1: 
-            print("phonems vs phonems")
-            mode_prompts = ('/diy/', '/iy/', '/m/', '/n/', '/piy/', '/tiy/', '/uw/')
-            X = _calculate_features("thinking_inds", mode_prompts)
-            Y = [pr for pr in self.prompts["prompts"][0] if pr in mode_prompts]
-        elif mode == 2:
-            print("words vs words")
-            mode_prompts = ('gnaw', 'knew', 'pat', 'pot')
-            X = _calculate_features("thinking_inds", mode_prompts)
-            Y = [pr for pr in self.prompts["prompts"][0] if pr in mode_prompts]
-        elif mode == 3:
-            print("phonems vs words")
-            words = ('gnaw', 'knew', 'pat', 'pot')
-            X = _calculate_features("thinking_inds", 'all')
+        if type(prompts_list) is dict:
+            print('Making custom categories.')
             for prompt in self.prompts["prompts"][0]:
-                if prompt in words:
-                    Y.append('word')
-                else:
-                    Y.append('phoneme')
-        elif mode == 4:
-            print("all vs all")
-            X = _calculate_features("thinking_inds", 'all')
-            Y = self.prompts["prompts"][0]
+                if prompt[0] in prompts_list:
+                    Y.append(prompts_list[prompt[0]])
+            X = _calculate_features("thinking_inds", prompts_list.keys())
         else:
-            raise AttributeError("Wrong \"mode\" value, allowed range is <0,4>.")
-
+            print('Rest vs active.')
+            Y = self.prompts["prompts"][0]
+            X = _calculate_features("clearing_inds", Y)
+            X.extend(_calculate_features("thinking_inds", Y))
+            Y = np.hstack([np.repeat('rest', len(X)/2), np.repeat('active', len(X)/2)])
+        
         print("Features calculated.\nDone in %0.3fs" % (time() - t0))
-
         self.X = np.asarray(X)
-        self.Y = np.asarray(Y) 
+        self.Y = np.hstack(Y) 
 
         if scale_data:
             print("Scaling data.")
@@ -338,22 +324,18 @@ class Dataset:
         return self.X['feature_value'], self.Y
 
 
-    def find_best_features(self, feature_limit=30, statistic = 'Anova'):
+    def find_best_features(self, feature_limit=30):
         """Select n best features.
 
         Notes
         -----
         Reduces dimensionality and redundancy of features. 
+        The implementation is based on Anova.
 
         Parameters
         ----------
         feature_limit : int
             Number of features to leave. 
-        statistic : {'Anova', 'Kruskal'}
-            There are two statistics available, one parametrical
-            and one non-parametrical. Results may slightly differ.
-            Anova is recommended first, it provides feedback in case
-            distribution of data is not normal.
 
         Returns
         -------
@@ -364,24 +346,10 @@ class Dataset:
         """ 
         X = self.X
         Y = self.Y
-        # for idx, x in enumerate(X['feature_value']):
-#     X['feature_value'][idx].reshape(-1,1) = x.reshape(-1,1)
-            # X['feature_value'][idx] = np.array([x])
-        # mm05.X['feature_value'][0].shape
-        # Y = Y.reshape(-1,1)
 
-        if statistic == 'Anova':
-            print("Calculating ANOVA.")
-            selector = SelectKBest(score_func=f_classif, k=feature_limit)
-        # TODO redo whole Kruskal
-        elif statistic == 'Kruskal':
-            for idx, x in enumerate(X['feature_value']):
-                X['feature_value'][idx] = np.atleast_1d(x)
-            Y = Y.reshape(-1,1)
-            selector = SelectKBest(score_func=stats.kruskal, k=feature_limit)
-        else:
-            raise AttributeError ('Wrong \"statistic\" atribute.')
-        # print(X['feature_value'].shape, Y.shape, X['feature_value'], Y)
+        print("Calculating ANOVA.")
+        selector = SelectKBest(score_func=f_classif, k=feature_limit)
+        
         selector.fit(X['feature_value'], Y)
         print(selector.get_support([True]))
 
